@@ -7,41 +7,84 @@ from dateutil.relativedelta import relativedelta
 # Paginastijling
 st.set_page_config(page_title="Vergunning Verplichtingen Monitor", layout="wide")
 
-st.title("📄 Permit Notification Tool©")
+st.title("📄 Vergunning Verplichtingen & Deadlines Monitor")
 st.markdown("""
-Upload hieronder de omgevingsvergunning (PDF) en voer de **datum van inwerkingtreding** in. 
-Het programma berekent automatisch op basis van de voorschriften wanneer specifieke acties en rapportages moeten zijn ingediend.
+Upload hieronder de omgevingsvergunning (PDF), geef op op welke pagina's de voorschriften staan, 
+en voer de **datum van inwerkingtreding** in. Het programma berekent automatisch de deadlines.
 """)
 
 # --- ZIJBALK VOOR INVOER ---
-st.sidebar.header("1. Vergunning Configuratie")
+st.sidebar.header("1. Configuratie & Pagina's")
 uploaded_file = st.sidebar.file_uploader("Upload Omgevingsvergunning (PDF)", type=["pdf"])
 
-# Standaarddatum op 12 juni 2026 (zoals in de vergunning)
+# Veld om paginabereik van de voorschriften op te geven (nu leeg als standaard)
+paginas_input = st.sidebar.text_input(
+    "Pagina's met voorschriften", 
+    value="", 
+    placeholder="Bijv. 48-57 of 30,35,40-45",
+    help="Vul hier het paginabereik in waar de voorschriften in deze specifieke vergunning staan."
+)
+
+# Datum van inwerkingtreding
 default_date = datetime.strptime("2026-06-12", "%Y-%m-%d").date()
 inwerking_date = st.sidebar.date_input("Datum van inwerkingtreding", value=default_date)
 
 st.sidebar.markdown("---")
-st.sidebar.info("Tip: Dit hulpmiddel leest de vaste wettelijke en vergunninggebonden termijnen uit Bijlage 1 en rekent deze direct voor je uit.")
+st.sidebar.info("Tip: Controleer eerst in de PDF op welke pagina's de voorschriften beginnen en eindigen en vul dat hierboven in.")
+
+# Functie om paginabereik string om te zetten naar een lijst van Paginanummers (0-based index)
+def parse_page_ranges(range_str, total_pages):
+    if not range_str.strip():
+        return []
+    page_nums = set()
+    parts = range_str.split(',')
+    for part in parts:
+        part = part.strip()
+        if '-' in part:
+            try:
+                start, end = map(int, part.split('-'))
+                for p in range(max(1, start), min(total_pages, end) + 1):
+                    page_nums.add(p - 1)
+            except ValueError:
+                pass
+        else:
+            try:
+                p = int(part)
+                if 1 <= p <= total_pages:
+                    page_nums.add(p - 1)
+            except ValueError:
+                pass
+    return sorted(list(page_nums))
 
 # --- HOOFDSCHERM ---
 if uploaded_file is not None:
-    # PDF inlezen en tekst extraheren
+    # PDF inlezen
     with pdfplumber.open(uploaded_file) as pdf:
         total_pages = len(pdf.pages)
+        
+        # Bepaal welke pagina's geselecteerd zijn
+        target_pages = parse_page_ranges(paginas_input, total_pages)
+        
         full_text = ""
-        for page in pdf.pages:
+        voorschriften_text = ""
+        
+        for idx, page in enumerate(pdf.pages):
             text = page.extract_text()
             if text:
-                full_text += text + "\n"
+                full_text += f"\n--- PAGINA {idx + 1} ---\n" + text
+                if idx in target_pages:
+                    voorschriften_text += f"\n--- PAGINA {idx + 1} ---\n" + text
 
-    st.success(f"PDF succesvol geladen ({total_pages} pagina's gedetecteerd). Inwerkingtreding vastgesteld op: **{inwerking_date.strftime('%d-%m-%Y')}**")
+    # Waarschuwing als er nog geen pagina's zijn ingevuld
+    if not paginas_input.strip():
+        st.warning("⚠️ Vul aan de linkerkant in de zijbalk in op welke pagina's de voorschriften staan om de gerichte tekst te bekijken.")
+    else:
+        st.success(f"PDF succesvol geladen ({total_pages} pagina's). Analyse gericht op geselecteerde pagina's: **{paginas_input}**.")
 
     # Bepaal deadlines op basis van inwerkingtreding
     deadline_zzs = inwerking_date + relativedelta(months=6)
     deadline_lucht_overzicht = inwerking_date + relativedelta(years=1)
     
-    # Einde van het eerste kalenderjaar voor de jaarlijkse rapportage
     end_of_year = datetime(inwerking_date.year, 12, 31).date()
     deadline_jaarrapportage = end_of_year + relativedelta(months=3)
 
@@ -105,9 +148,10 @@ if uploaded_file is not None:
         mime='text/csv',
     )
 
-    # Uitgebreide tekstweergave optie
-    with st.expander("🔍 Bekijk volledige tekst van Bijlage 1 (Voorschriften) uit de PDF"):
-        st.text_area("Geëxtraheerde PDF-inhoud", full_text, height=300)
+    # Weergave van de geselecteerde voorschriften-tekst (indien ingevuld)
+    if paginas_input.strip():
+        with st.expander(f"🔍 Bekijk geëxtraheerde tekst van de opgegeven voorschriften-pagina's ({paginas_input})"):
+            st.text_area("Voorschriften tekst", voorschriften_text, height=300)
 
 else:
     st.info("👈 Upload ten minste een PDF-bestand via de zijbalk om de applicatie te starten.")
