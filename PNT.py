@@ -10,7 +10,7 @@ st.set_page_config(page_title="Vergunning Verplichtingen Monitor", layout="wide"
 st.title("📄 Vergunning Verplichtingen & Deadlines Monitor")
 st.markdown("""
 Upload hieronder je omgevingsvergunning (PDF), geef op op welke pagina's de voorschriften staan en stel de datum van inwerkingtreding in. 
-Het programma leest de voorschriften uit de PDF en toont direct het overzicht van verplichtingen.
+Het programma leest de geselecteerde pagina's uit zodat je de verplichtingen kunt bekijken en verwerken.
 """)
 
 # --- ZIJBALK VOOR INVOER ---
@@ -79,67 +79,27 @@ if uploaded_file is not None:
 
         # Toon de tekst zodat de gebruiker kan nazoeken wat er in DEZE specifieke vergunning staat
         with st.expander(f"📖 Lees de tekst van de voorschriften (Pagina {paginas_input})"):
-            st.text_area("Inhoud voorschriften", voorschriften_text, height=250)
+            st.text_area("Inhoud voorschriften", voorschriften_text, height=300)
 
         st.markdown("---")
-        st.subheader("📅 Berekend overzicht van verplichtingen en deadlines")
-        st.markdown(f"Deadlines berekend op basis van inwerkingtreding per: **{inwerking_date.strftime('%d-%m-%Y')}**")
+        st.subheader("📝 Overzicht verplichtingen voor deze vergunning")
+        st.markdown(f"Inwerkingtreding ingesteld op: **{inwerking_date.strftime('%d-%m-%Y')}**. Hieronder kun je optioneel eigen notities of verplichtingen op basis van de gelezen tekst toevoegen.")
 
-        # Bepaal datums op basis van inwerkingtreding
-        deadline_zzs = inwerking_date + relativedelta(months=6)
-        deadline_lucht_overzicht = inwerking_date + relativedelta(years=1)
-        end_of_year = datetime(inwerking_date.year, 12, 31).date()
-        deadline_jaarrapportage = end_of_year + relativedelta(months=3)
-
-        data = [
+        # Een volledig lege starttabel (geen vooringevulde L7-F data meer!)
+        empty_data = [
             {
-                "Voorschrift": "Voorschrift 15.1",
-                "Verplichting": "Indienen vermijdings- en reductieprogramma / informatieplicht ZZS",
-                "Termijn": "Binnen 6 maanden na inwerkingtreding",
-                "Berekende Deadline": deadline_zzs.strftime('%d-%m-%Y'),
-                "Ontvanger": "Bevoegd Gezag"
-            },
-            {
-                "Voorschrift": "Voorschrift 12.4",
-                "Verplichting": "Opstellen overzicht emissies naar de lucht (o.a. methaan, benzeen)",
-                "Termijn": "Binnen 1 jaar na van kracht worden besluit",
-                "Berekende Deadline": deadline_lucht_overzicht.strftime('%d-%m-%Y'),
-                "Ontvanger": "Inspecteur-generaal der Mijnen (SodM)"
-            },
-            {
-                "Voorschrift": "Voorschrift 12.4",
-                "Verplichting": f"Jaarlijkse rapportage luchtemissies (over kalenderjaar {inwerking_date.year})",
-                "Termijn": "Binnen 3 maanden na afloop van elk kalenderjaar",
-                "Berekende Deadline": deadline_jaarrapportage.strftime('%d-%m-%Y'),
-                "Ontvanger": "Inspecteur-generaal der Mijnen (SodM)"
-            },
-            {
-                "Voorschrift": "Voorschrift 17.1",
-                "Verplichting": "Indienen 'North Sea Activity (NSA) aanvraagformulier'",
-                "Termijn": "Ten minste 2 weken voor aanvang werkzaamheden",
-                "Berekende Deadline": "Dynamisch (voor start project)",
-                "Ontvanger": "Kustwacht"
-            },
-            {
-                "Voorschrift": "Voorschrift 5.2",
-                "Verplichting": "Melding gecontroleerd affakkelen of afblazen bij normale bedrijfsvoering",
-                "Termijn": "Ten minste 48 uur voor aanvang",
-                "Berekende Deadline": "Dynamisch (voor handeling)",
-                "Ontvanger": "Toezichthouder (SodM)"
+                "Voorschrift Nr.": "",
+                "Verplichting / Actie": "",
+                "Termijn": "",
+                "Ontvanger / Instantie": ""
             }
         ]
+        
+        df_empty = pd.DataFrame(empty_data)
 
-        df = pd.DataFrame(data)
-        st.dataframe(df, use_container_width=True)
-
-        # Downloadknop
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Download dit overzicht als CSV",
-            data=csv,
-            file_name=f"vergunning_deadlines_{inwerking_date}.csv",
-            mime='text/csv',
-        )
+        # We tonen een schone tabel
+        st.info("Tip: Gebruik de tekst hierboven om de verplichtingen uit je nieuwe vergunning te lezen.")
+        st.dataframe(df_empty, use_container_width=True)
 
 else:
     st.info("👈 Upload ten minste een PDF-bestand via de zijbalk om de applicatie te starten.")
