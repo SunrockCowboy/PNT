@@ -85,7 +85,7 @@ if uploaded_file is not None:
         st.subheader("📅 Berekend overzicht van verplichtingen en deadlines")
         st.markdown(f"Deadlines berekend op basis van inwerkingtreding per: **{inwerking_date.strftime('%d-%m-%Y')}**")
 
-        # Standaard overzichtelijk sjabloon van verplichtingen dat dynamisch rekent met de ingevoerde datum
+        # Bepaal datums op basis van inwerkingtreding
         deadline_zzs = inwerking_date + relativedelta(months=6)
         deadline_lucht_overzicht = inwerking_date + relativedelta(years=1)
         end_of_year = datetime(inwerking_date.year, 12, 31).date()
@@ -115,7 +115,6 @@ if uploaded_file is not None:
             },
             {
                 "Voorschrift": "Voorschrift 17.1",
-                "Termijngebonden",
                 "Verplichting": "Indienen 'North Sea Activity (NSA) aanvraagformulier'",
                 "Termijn": "Ten minste 2 weken voor aanvang werkzaamheden",
                 "Berekende Deadline": "Dynamisch (voor start project)",
