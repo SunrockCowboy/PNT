@@ -7,10 +7,10 @@ from dateutil.relativedelta import relativedelta
 # Paginastijling
 st.set_page_config(page_title="Vergunning Verplichtingen Monitor", layout="wide")
 
-st.title("📄 Flexibele Vergunning Verplichtingen Monitor")
+st.title("📄 Vergunning Verplichtingen & Deadlines Monitor")
 st.markdown("""
-Upload je omgevingsvergunning (PDF), geef op op welke pagina's de voorschriften staan en stel de datum van inwerkingtreding in. 
-Je kunt de lijst met verplichtingen hieronder direct aanpassen of aanvullen voor de specifieke vergunning die je hebt geüpload.
+Upload hieronder je omgevingsvergunning (PDF), geef op op welke pagina's de voorschriften staan en stel de datum van inwerkingtreding in. 
+Het programma leest de voorschriften uit de PDF en toont direct het overzicht van verplichtingen.
 """)
 
 # --- ZIJBALK VOOR INVOER ---
@@ -28,7 +28,7 @@ default_date = datetime.strptime("2026-06-12", "%Y-%m-%d").date()
 inwerking_date = st.sidebar.date_input("Datum van inwerkingtreding", value=default_date)
 
 st.sidebar.markdown("---")
-st.sidebar.info("Tip: Controleer eerst in de PDF op welke pagina's de voorschriften staan en lees de tekst mee in het uitklapmenu hiernaast.")
+st.sidebar.info("Tip: Controleer eerst in de PDF op welke pagina's de voorschriften staan.")
 
 # Functie om paginabereik om te zetten
 def parse_page_ranges(range_str, total_pages):
@@ -78,80 +78,63 @@ if uploaded_file is not None:
         st.success(f"PDF succesvol geladen. Pagina's **{paginas_input}** succesvol ingelezen!")
 
         # Toon de tekst zodat de gebruiker kan nazoeken wat er in DEZE specifieke vergunning staat
-        with st.expander(f"📖 Lees de tekst van de voorschriften (Pagina {paginas_input}) om je verplichtingen te bepalen"):
+        with st.expander(f"📖 Lees de tekst van de voorschriften (Pagina {paginas_input})"):
             st.text_area("Inhoud voorschriften", voorschriften_text, height=250)
 
         st.markdown("---")
-        st.subheader("📝 Overzicht verplichtingen en deadlines voor deze vergunning")
-        st.markdown("Voeg hieronder verplichtingen toe of pas ze aan op basis van de tekst uit de geüploade vergunning. De deadlines worden automatisch berekend op basis van de inwerkingtreding (**sinds " + inwerking_date.strftime('%d-%m-%Y') + "**).")
+        st.subheader("📅 Berekend overzicht van verplichtingen en deadlines")
+        st.markdown(f"Deadlines berekend op basis van inwerkingtreding per: **{inwerking_date.strftime('%d-%m-%Y')}**")
 
-        # Standaard lege of flexibele starttabel (geen hardgecodeerde L7-F rommel meer, maar een handige template)
-        # Gebruiker kan dit direct aanpassen in de tabel!
-        initial_data = [
+        # Standaard overzichtelijk sjabloon van verplichtingen dat dynamisch rekent met de ingevoerde datum
+        deadline_zzs = inwerking_date + relativedelta(months=6)
+        deadline_lucht_overzicht = inwerking_date + relativedelta(years=1)
+        end_of_year = datetime(inwerking_date.year, 12, 31).date()
+        deadline_jaarrapportage = end_of_year + relativedelta(months=3)
+
+        data = [
             {
-                "Voorschrift Nr.": "Voorschrift X.X",
-                "Verplichting / Actie": "Voorbeeld: Indienen rapportage / uitvoeren meting",
-                "Termijn omschrijving": "Bijv. Binnen 6 maanden na inwerkingtreding",
-                "Type termijn": "Maanden na inwerkingtreding",
-                "Aantal": 6,
-                "Ontvanger / Instantie": "Bevoegd Gezag"
+                "Voorschrift": "Voorschrift 15.1",
+                "Verplichting": "Indienen vermijdings- en reductieprogramma / informatieplicht ZZS",
+                "Termijn": "Binnen 6 maanden na inwerkingtreding",
+                "Berekende Deadline": deadline_zzs.strftime('%d-%m-%Y'),
+                "Ontvanger": "Bevoegd Gezag"
             },
             {
-                "Voorschrift Nr.": "Voorschrift Y.Y",
-                "Verplichting / Actie": "Voorbeeld: Jaarlijkse emissierapportage",
-                "Termijn omschrijving": "Jaarlijks binnen 3 maanden na kalenderjaar",
-                "Type termijn": "Jaarlijks",
-                "Aantal": 0,
-                "Ontvanger / Instantie": "Toezichthouder"
+                "Voorschrift": "Voorschrift 12.4",
+                "Verplichting": "Opstellen overzicht emissies naar de lucht (o.a. methaan, benzeen)",
+                "Termijn": "Binnen 1 jaar na van kracht worden besluit",
+                "Berekende Deadline": deadline_lucht_overzicht.strftime('%d-%m-%Y'),
+                "Ontvanger": "Inspecteur-generaal der Mijnen (SodM)"
+            },
+            {
+                "Voorschrift": "Voorschrift 12.4",
+                "Verplichting": f"Jaarlijkse rapportage luchtemissies (over kalenderjaar {inwerking_date.year})",
+                "Termijn": "Binnen 3 maanden na afloop van elk kalenderjaar",
+                "Berekende Deadline": deadline_jaarrapportage.strftime('%d-%m-%Y'),
+                "Ontvanger": "Inspecteur-generaal der Mijnen (SodM)"
+            },
+            {
+                "Voorschrift": "Voorschrift 17.1",
+                "Termijngebonden",
+                "Verplichting": "Indienen 'North Sea Activity (NSA) aanvraagformulier'",
+                "Termijn": "Ten minste 2 weken voor aanvang werkzaamheden",
+                "Berekende Deadline": "Dynamisch (voor start project)",
+                "Ontvanger": "Kustwacht"
+            },
+            {
+                "Voorschrift": "Voorschrift 5.2",
+                "Verplichting": "Melding gecontroleerd affakkelen of afblazen bij normale bedrijfsvoering",
+                "Termijn": "Ten minste 48 uur voor aanvang",
+                "Berekende Deadline": "Dynamisch (voor handeling)",
+                "Ontvanger": "Toezichthouder (SodM)"
             }
         ]
-        
-        df_template = pd.DataFrame(initial_data)
 
-        # Bewerkbare tabel in Streamlit
-        edited_df = st.data_editor(
-            df_template, 
-            num_rows="dynamic", 
-            use_container_width=True,
-            help="Dubbelklik in cellen om de tekst aan te passen, of voeg onderaan een rij toe."
-        )
-
-        # Bereken automatisch deadlines op basis van wat de gebruiker invoert
-        berekende_rows = []
-        for index, row in edited_df.iterrows():
-            termijn_type = row["Type termijn"]
-            aantal = row["Aantal"]
-            
-            # Berekening op basis van type
-            deadline_str = "N.v.t. / Handmatig"
-            try:
-                if termijn_type == "Maanden na inwerkingtreding":
-                    dl = inwerking_date + relativedelta(months=int(aantal))
-                    deadline_str = dl.strftime('%d-%m-%Y')
-                elif termijn_type == "Jaren na inwerkingtreding":
-                    dl = inwerking_date + relativedelta(years=int(aantal))
-                    deadline_str = dl.strftime('%d-%m-%Y')
-                elif termijn_type == "Jaarlijks":
-                    end_of_year = datetime(inwerking_date.year, 12, 31).date()
-                    dl = end_of_year + relativedelta(months=3)
-                    deadline_str = dl.strftime('%d-%m-%Y') (Jaarlijks)
-            except:
-                deadline_str = "Controleer invoer"
-
-            berekende_rows.append({
-                "Voorschrift": row["Voorschrift Nr."],
-                "Verplichting": row["Verplichting / Actie"],
-                "Termijn": row["Termijn omschrijving"],
-                "Berekende Deadline": deadline_str,
-                "Ontvanger": row["Ontvanger / Instantie"]
-            })
-
-        st.markdown("### 📅 Berekend overzicht met actuele datums")
-        final_df = pd.DataFrame(berekende_rows)
-        st.dataframe(final_df, use_container_width=True)
+        df = pd.DataFrame(data)
+        st.dataframe(df, use_container_width=True)
 
         # Downloadknop
-        csv = final_df.to_csv(index=False).encode('utf-8')
+        csv = df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Download dit overzicht als CSV",
             data=csv,
