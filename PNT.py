@@ -1,16 +1,17 @@
 import streamlit as st
 import pdfplumber
 import pandas as pd
+import re
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
 # Paginastijling
 st.set_page_config(page_title="Vergunning Verplichtingen Monitor", layout="wide")
 
-st.title("📄 Vergunning Verplichtingen & Deadlines Monitor")
+st.title("📄 Universele Vergunning Verplichtingen & Deadlines Monitor")
 st.markdown("""
-Upload hieronder je omgevingsvergunning (PDF), geef op op welke pagina's de voorschriften staan en stel de datum van inwerkingtreding in. 
-Het programma leest de geselecteerde pagina's uit zodat je de verplichtingen kunt bekijken en verwerken.
+Upload je omgevingsvergunning (PDF), geef op op welke pagina's de voorschriften staan en stel de datum van inwerkingtreding in. 
+Het programma scant de geselecteerde pagina's automatisch op verplichtingen en termijnen.
 """)
 
 # --- ZIJBALK VOOR INVOER ---
@@ -28,7 +29,7 @@ default_date = datetime.strptime("2026-06-12", "%Y-%m-%d").date()
 inwerking_date = st.sidebar.date_input("Datum van inwerkingtreding", value=default_date)
 
 st.sidebar.markdown("---")
-st.sidebar.info("Tip: Controleer eerst in de PDF op welke pagina's de voorschriften staan.")
+st.sidebar.info("Tip: Geef de exacte pagina's op waar de voorschriften beginnen en eindigen.")
 
 # Functie om paginabereik om te zetten
 def parse_page_ranges(range_str, total_pages):
@@ -54,6 +55,32 @@ def parse_page_ranges(range_str, total_pages):
                 pass
     return sorted(list(page_nums))
 
+# Functie om automatisch zinnen met verplichtingen/termijnen te filteren
+def extract_potential_obligations(text):
+    # Splits de tekst op in zinnen of alinea's
+    lines = text.split('\n')
+    filtered_results = []
+    
+    # Trefwoorden die vaak wijzen op een verplichting, rapportage of termijn
+    trigger_words = [
+        'binnen', 'maand', 'maanden', 'jaar', 'jaarlijks', 'dagen', 'uur', 
+        'indienen', 'melden', 'overleggen', 'verstrekken', 'rapporteren', 
+        'voordat', 'voorafgaand', 'ten minste', 'termijn'
+    ]
+    
+    for line in lines:
+        line_lower = line.lower()
+        # Controleer of de regel een voorschrift-aanduiding bevat (bijv. "15.1" of "Voorschrift") of een triggerwoord
+        has_trigger = any(word in line_lower for word in trigger_words)
+        is_article = 'voorschrift' in line_lower or re.search(r'\b\d+\.\d+\b', line)
+        
+        if has_trigger or is_article:
+            cleaned_line = line.strip()
+            if len(cleaned_line) > 15: # Skip lege of heel korte regels
+                filtered_results.append(cleaned_line)
+                
+    return list(set(filtered_results)) # Unieke resultaten
+
 # --- HOOFDSCHERM ---
 if uploaded_file is not None:
     with pdfplumber.open(uploaded_file) as pdf:
@@ -73,33 +100,43 @@ if uploaded_file is not None:
                 page = pdf.pages[p_idx]
                 text = page.extract_text()
                 if text:
-                    voorschriften_text += f"\n--- PAGINA {p_idx + 1} ---\n" + text
+                    voorschriften_text += f"\n{text}\n"
 
-        st.success(f"PDF succesvol geladen. Pagina's **{paginas_input}** succesvol ingelezen!")
+        st.success(f"PDF succesvol geladen. Pagina's **{paginas_input}** automatisch gefilterd en geanalyseerd!")
 
-        # Toon de tekst zodat de gebruiker kan nazoeken wat er in DEZE specifieke vergunning staat
-        with st.expander(f"📖 Lees de tekst van de voorschriften (Pagina {paginas_input})"):
-            st.text_area("Inhoud voorschriften", voorschriften_text, height=300)
+        # Automatisch filteren van verplichtingen
+        raw_obligations = extract_potential_obligations(voorschriften_text)
 
-        st.markdown("---")
-        st.subheader("📝 Overzicht verplichtingen voor deze vergunning")
-        st.markdown(f"Inwerkingtreding ingesteld op: **{inwerking_date.strftime('%d-%m-%Y')}**. Hieronder kun je optioneel eigen notities of verplichtingen op basis van de gelezen tekst toevoegen.")
+        st.subheader("🔍 Automatisch gedetecteerde verplichtingen & voorschriften")
+        st.markdown(f"Hieronder staan de zinnen uit de geselecteerde pagina's waarin termen staan die duiden op een verplichting of termijn (gebaseerd op inwerkingtreding per **{inwerking_date.strftime('%d-%m-%Y')}**):")
 
-        # Een volledig lege starttabel (geen vooringevulde L7-F data meer!)
-        empty_data = [
-            {
-                "Voorschrift Nr.": "",
-                "Verplichting / Actie": "",
-                "Termijn": "",
-                "Ontvanger / Instantie": ""
-            }
-        ]
-        
-        df_empty = pd.DataFrame(empty_data)
+        if raw_obligations:
+            # Zet de gefilterde zinnen in een nette tabel
+            df_data = []
+            for idx, item in enumerate(raw_obligations, start=1):
+                df_data.append({
+                    "Nr": idx,
+                    "Gedetecteerde Voorschrift / Verplichting": item,
+                    "Inwerkingtreding": inwerking_date.strftime('%d-%m-%Y')
+                })
+            
+            df = pd.DataFrame(df_data)
+            st.dataframe(df, use_container_width=True)
 
-        # We tonen een schone tabel
-        st.info("Tip: Gebruik de tekst hierboven om de verplichtingen uit je nieuwe vergunning te lezen.")
-        st.dataframe(df_empty, use_container_width=True)
+            # Downloadknop
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download gedetecteerd overzicht als CSV",
+                data=csv,
+                file_name=f"gefilterde_vergunning_verplichtingen_{inwerking_date}.csv",
+                mime='text/csv',
+            )
+        else:
+            st.warning("Geen specifieke verplichtingen automatisch gedetecteerd in dit paginabereik. Probeer een ander bereik of controleer de tekst hieronder.")
+
+        # Volledige tekst inzage als back-up
+        with st.expander(f"📖 Bekijk de volledige ruwe tekst van pagina {paginas_input}"):
+            st.text_area("Ruwe tekst", voorschriften_text, height=300)
 
 else:
     st.info("👈 Upload ten minste een PDF-bestand via de zijbalk om de applicatie te starten.")
